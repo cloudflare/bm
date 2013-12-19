@@ -1,4 +1,4 @@
 bm
 ==
 
-A Golang implementation of Bentley/McIlroy long string compression
+A Golang implementation of the Bentley/McIlroy compression algorithm
