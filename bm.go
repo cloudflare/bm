@@ -73,8 +73,8 @@ type Compressor struct {
 // io.Writer and so calling Write() compress and writes to the actual
 // output.  Note that you must call SetWriter and SetDictionary before
 // doing any compression to set the output writer.
-func NewCompressor() (c *Compressor) {
-	c = new(Compressor)
+func NewCompressor() *Compressor {
+	c := Compressor{}
 	c.w = nil
 	c.f = 0
 
@@ -97,7 +97,7 @@ func NewCompressor() (c *Compressor) {
 	c.inSize = 0
 	c.outSize = 0
 
-	return
+	return &c
 }
 
 // SetWriter sets the writer to which the compressed output will be written.
@@ -114,7 +114,6 @@ func (c *Compressor) SetDictionary(dict *Dictionary) {
 
 	// If the dictionary of hashes has not been computed then it must
 	// be computed now
-
 	if dict.H == nil {
 		c.dict.H = make(map[uint32]uint32)
 
@@ -149,12 +148,11 @@ func (c *Compressor) GetDictionary() *Dictionary {
 // Write implements the io.Writer interface.  To compress data Write
 // repeatedly and it will be compressed.  When done it is necessary to
 // call Close() where the actual compression occurs.
-func (c *Compressor) Write(p []byte) (n int, err error) {
+func (c *Compressor) Write(p []byte) (int, error) {
 	c.d = append(c.d, p...)
-	n = len(p)
+	n := len(p)
 	c.inSize += n
-	err = nil
-	return
+	return n, nil
 }
 
 // File format:
@@ -169,63 +167,69 @@ func (c *Compressor) Write(p []byte) (n int, err error) {
 
 // writeVarUInt: writes out a variable integer which used base 128
 // in the style of Google Protocol Buffers.
-func (c *Compressor) writeVarUint(u uint32) (err error) {
+func (c *Compressor) writeVarUint(u uint32) error {
 	buf := make([]byte, 1)
-	err = nil
 
-	for err == nil {
+	for {
 		buf[0] = byte(u & 0x7F)
 		u >>= 7
 
 		if u != 0 {
 			buf[0] |= 0x80
 		}
-		n, _ := c.w.Write(buf)
+		n, err := c.w.Write(buf)
+		if err != nil {
+			return err
+		}
 		c.outSize += n
 		if u == 0 {
 			break
 		}
 	}
-	return
+	return nil
 }
 
 // writeUncompressedBlock: writes out a block of uncompressed data
 // preceded by the length of the block as a variable length integer
-func (c *Compressor) writeUncompressedBlock(d []byte) (err error) {
+func (c *Compressor) writeUncompressedBlock(d []byte) error {
 	if len(d) == 0 {
-		err = nil
-		return
+		return nil
 	}
-	if err = c.writeVarUint(uint32(len(d))); err == nil {
-		n, _ := c.w.Write(d)
+	if err := c.writeVarUint(uint32(len(d))); err != nil {
+		return err
+	}
+	if n, err := c.w.Write(d); err != nil {
+		return err
+	} else {
 		c.outSize += n
 	}
-	return
+	return nil
 }
 
 // writeCompressedReference: writes out a block of compressed data
 // which simply consists of a reference to the start of a block to
 // copy and its length.  This is preceded by zero to indicate that
 // this is a block of compressed data
-func (c *Compressor) writeCompressedReference(start, offset uint32) (err error) {
+func (c *Compressor) writeCompressedReference(start, offset uint32) error {
 	zero := []byte{0}
-	if n, err := c.w.Write(zero); err == nil {
+	if n, err := c.w.Write(zero); err != nil {
+		return err
+	} else {
 		c.outSize += n
-		if err = c.writeVarUint(start); err == nil {
-			err = c.writeVarUint(offset)
-		}
+	}
+	if err := c.writeVarUint(start); err != nil {
+		return err
 	}
 
-	return
+	return c.writeVarUint(offset)
+
 }
 
 // Close tells the compressor that all the data has been written.
 // This does not close the underlying io.Writer.  This is where the
 // Bentley/McIlroy and Rabin/Karp algorithms are implemented.
 // Reference those papers for a full explanation.
-func (c *Compressor) Close() (err error) {
-	err = nil
-
+func (c *Compressor) Close() error {
 	var skip uint32
 	var last uint32
 
@@ -320,15 +324,16 @@ func (c *Compressor) Close() (err error) {
 						}
 					}
 
-					err = c.writeUncompressedBlock(c.d[last : i-block-s])
-					err = c.writeCompressedReference(e-s, block+s+f)
+					if err := c.writeUncompressedBlock(c.d[last : i-block-s]); err != nil {
+						return err
+					}
+					if err := c.writeCompressedReference(e-s, block+s+f); err != nil {
+						return err
+					}
 					skip = i + f + block + 1
 					last = i + f
 				}
 
-				if err != nil {
-					return
-				}
 			}
 
 			c.f = ((c.f-c.save[c.d[i-block]])*radix + uint32(c.d[i])) & clip
@@ -336,10 +341,10 @@ func (c *Compressor) Close() (err error) {
 	}
 
 	if last < uint32(len(c.d)) {
-		err = c.writeUncompressedBlock(c.d[last:])
+		return c.writeUncompressedBlock(c.d[last:])
 	}
 
-	return
+	return nil
 }
 
 // Ratio retrieves the compression ratio of the last compression
@@ -347,19 +352,16 @@ func (c *Compressor) Close() (err error) {
 // returned value is an integer representing the size of the output as
 // a percentage of the input * 100. If the return value is -1 then it
 // indicates that there was no input.
-func (c *Compressor) Ratio() (r int) {
+func (c *Compressor) Ratio() int {
 	if c.inSize > 0 {
-		r = (10000 * c.outSize) / c.inSize
-	} else {
-		r = -1
+		return (10000 * c.outSize) / c.inSize
 	}
-
-	return
+	return -1
 }
 
 // SerializeDictionary turns H (the map part of the Dictionary) into a
 // []byte for easy storage in memcached or elsewhere.
-func (c *Compressor) SerializeDictionary() (o []byte, err error) {
+func (c *Compressor) SerializeDictionary() ([]byte, error) {
 	if len(c.dict.H) > 0 {
 
 		// This reserves enough space in o to store the entire map
@@ -372,38 +374,39 @@ func (c *Compressor) SerializeDictionary() (o []byte, err error) {
 			len(c.dict.H)*2*binary.MaxVarintLen32))
 
 		for k, v := range c.dict.H {
-			if err := binary.Write(buf, binary.LittleEndian, k); err == nil {
-				err = binary.Write(buf, binary.LittleEndian, v)
+			if err := binary.Write(buf, binary.LittleEndian, k); err != nil {
+				return nil, err
 			}
-
-			if err != nil {
+			if err := binary.Write(buf, binary.LittleEndian, v); err != nil {
 				return nil, err
 			}
 		}
 
-		o = buf.Bytes()
+		return buf.Bytes(), nil
 	}
 
-	return
+	return []byte{}, nil
 }
 
 // DeserializeDictionary reads the H part of the Dictionary from a
 // []byte previously created with SerializeDictionary
-func DeserializeDictionary(o []byte, m map[uint32]uint32) (err error) {
+func DeserializeDictionary(o []byte, m map[uint32]uint32) error {
 	buf := bytes.NewBuffer(o)
 
-	for buf.Len() > 0 && err == nil {
+	for buf.Len() > 0 {
 		var k uint32
 
-		if err := binary.Read(buf, binary.LittleEndian, &k); err == nil {
-			var v uint32
-			if err = binary.Read(buf, binary.LittleEndian, &v); err == nil {
-				m[k] = v
-			}
+		if err := binary.Read(buf, binary.LittleEndian, &k); err != nil {
+			return err
 		}
+		var v uint32
+		if err := binary.Read(buf, binary.LittleEndian, &v); err != nil {
+			return err
+		}
+		m[k] = v
 	}
 
-	return
+	return nil
 }
 
 // An Expander is the complete state of the expander returned by NewExpander
@@ -422,26 +425,24 @@ type Expander struct {
 // can be used to read the raw compressed data.  The Expander
 // implements io.Reader and so calling Read() decompress data and
 // reads the actual input.
-func NewExpander(r io.Reader, dict []byte) (e *Expander) {
-	e = new(Expander)
+func NewExpander(r io.Reader, dict []byte) *Expander {
+	e := Expander{}
 	e.r = r
 	e.to = 0
 	e.dict = dict
-	return
+	return &e
 }
 
 // readVarUint: since the compressed data consists of varints (see
 // bmcompress.go) for details then the fundamental operation is
 // reading varints
-func (e *Expander) readVarUint() (u uint, err error) {
-	u = 0
+func (e *Expander) readVarUint() (uint, error) {
+	u := uint(0)
 	b := make([]byte, 1)
-	err = nil
 	m := uint(1)
-	var n int
-	for err == nil {
-		if n, err = e.r.Read(b); n != 1 || err != nil {
-			break
+	for {
+		if n, err := e.r.Read(b); n != 1 || err != nil {
+			return 0, err
 		}
 
 		u += m * uint(b[0]&byte(0x7F))
@@ -452,7 +453,7 @@ func (e *Expander) readVarUint() (u uint, err error) {
 		}
 	}
 
-	return
+	return u, nil
 }
 
 // Expand expands the compressed data into a buffer
