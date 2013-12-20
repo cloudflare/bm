@@ -118,7 +118,7 @@ func (c *Compressor) SetDictionary(dict *Dictionary) {
 		c.dict.H = make(map[uint32]uint32)
 
 		f := uint32(0)
-		for ii, _ := range c.dict.Dict {
+		for ii := range c.dict.Dict {
 			i := uint32(ii)
 
 			if i < block {
@@ -238,7 +238,7 @@ func (c *Compressor) Close() error {
 	// (for self referential compression) or its the dictionary set by
 	// SetDictionary
 
-	for x, _ := range c.d {
+	for x := range c.d {
 		i := uint32(x)
 
 		// The first block bytes are consumed to calculate the
