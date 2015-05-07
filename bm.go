@@ -359,6 +359,18 @@ func (c *Compressor) Ratio() int {
 	return -1
 }
 
+// Get the size in bytes of the last compressed output. Only makes
+// sense after Close() has been called.
+func (c *Compressor) CompressedSize() int {
+	return c.outSize
+}
+
+// Get the size in bytes of the last uncompressed input. Only makes
+// sense after Close() has been called.
+func (c *Compressor) InputSize() int {
+	return c.inSize
+}
+
 // SerializeDictionary turns H (the map part of the Dictionary) into a
 // []byte for easy storage in memcached or elsewhere.
 func (c *Compressor) SerializeDictionary() ([]byte, error) {
