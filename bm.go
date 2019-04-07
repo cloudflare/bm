@@ -28,7 +28,7 @@ import (
 // it can into 32 bits.  i.e. p is the prime nearest to
 // 2^32/d. Various tricks are performed below to speed the computation
 // of the hash. Notably p is not actually prime, it's a power of 2 so
-// that & is used intead of %.
+// that & is used instead of %.
 //
 // Fingerprints are generated over a fixed block size which is defined
 // here.  This is very open to experimentation and could actually be
