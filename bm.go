@@ -28,7 +28,7 @@ import (
 // it can into 32 bits.  i.e. p is the prime nearest to
 // 2^32/d. Various tricks are performed below to speed the computation
 // of the hash. Notably p is not actually prime, it's a power of 2 so
-// that & is used intead of %.
+// that & is used instead of %.
 //
 // Fingerprints are generated over a fixed block size which is defined
 // here.  This is very open to experimentation and could actually be
@@ -429,7 +429,7 @@ type Expander struct {
 	// compressed back references can be handled
 	to   int    // Position in d to which the caller has read
 	dict []byte // Dictionary to decompress against, if set then
-	// decompression is done referncing this.  If not
+	// decompression is done referencing this.  If not
 	// then references are internal.
 }
 
