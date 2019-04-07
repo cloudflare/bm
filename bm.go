@@ -429,7 +429,7 @@ type Expander struct {
 	// compressed back references can be handled
 	to   int    // Position in d to which the caller has read
 	dict []byte // Dictionary to decompress against, if set then
-	// decompression is done referncing this.  If not
+	// decompression is done referencing this.  If not
 	// then references are internal.
 }
 
